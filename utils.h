@@ -74,6 +74,16 @@ namespace FTUtils {
         return data;
     }
 
+    inline std::string normalize_path(std::string s) {
+        std::string illegalChars = "\\/:?\"<>|";
+        for (auto it = s.begin() ; it < s.end() ; ++it){
+            bool found = illegalChars.find(*it) != std::string::npos;
+            if(found){
+                *it = ' ';
+            }
+        }
+        return s;
+    }
 }
 
 #endif //FORDTOOLS_UTILS_H

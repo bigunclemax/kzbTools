@@ -72,17 +72,17 @@ int G_idx = 0x4c;
 std::vector<uint8_t> G_bin;
 
 
-void extract_resource(const std::string &resource_name, uint32_t address, uint32_t size) {
+void extract_resource(const fs::path &resource_path, uint32_t address, uint32_t size) {
 
     auto unk = *(uint32_t*)&G_bin[address];
 //    if(unk) { TODO:
-//        printf("%s - %x(%d)\n", resource_name.c_str(), unk, unk);
+//        printf("%s - 0x%x(%d)\n", resource_name.c_str(), unk, unk);
 //        throw std::runtime_error("Res unk !=0 ");
 //    }
-    FTUtils::bufferToFile(G_extract_path/resource_name, (const char*)&G_bin[address+sizeof(uint32_t)], size);
+    FTUtils::bufferToFile(G_extract_path / resource_path, (const char*)&G_bin[address + sizeof(uint32_t)], size);
 }
 
-uint32_t parseElements(const std::string &prefix, unsigned count, int depth) {
+uint32_t parseElements(const fs::path &prefix, unsigned count, int depth) {
 
     uint32_t processed_size = 0;
 
@@ -109,13 +109,15 @@ uint32_t parseElements(const std::string &prefix, unsigned count, int depth) {
         element.name = str;
         G_idx+=str_sz;
         G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
-
-        auto file_path = prefix+"/"+element.name;
-
+#if _WIN32
+        auto file_path = fs::path(prefix) / FTUtils::normalize_path(element.name);
+#else
+        auto file_path = fs::path(prefix) / element.name;
+#endif
         for(int j = 0; j < depth; ++j)
             printf("\t");
-        printf("File: %s Size: %x(%d) Addr: %x(%d) Unk1: %x(%d) Unk2: %x(%d)\n",
-               file_path.c_str(),
+        printf("File: %s Size: 0x%x(%d) Addr: 0x%x(%d) Unk1: 0x%x(%d) Unk2: 0x%x(%d)\n",
+               element.name.c_str(),
                element.size, element.size,
                element.addr, element.addr,
                element.unk1, element.unk1,
@@ -129,7 +131,7 @@ uint32_t parseElements(const std::string &prefix, unsigned count, int depth) {
     return processed_size;
 }
 
-uint32_t parseFolder(const std::string &prefix, int depth) {
+uint32_t parseFolder(const fs::path &prefix, int depth) {
 
     KZB_Folder folder = {};
 
@@ -154,20 +156,18 @@ uint32_t parseFolder(const std::string &prefix, int depth) {
         G_idx+=sizeof(uint32_t);
     }
 
-    auto folder_path = "Folder_"+folder.name;
+    auto folder_path = prefix / ("Folder_"+folder.name);
 
     for(int i = 0; i < depth; ++i)
         printf("\t");
-    printf("Folder: %s Size: %x(%d) Count: %x(%d)\n",
-           folder_path.c_str(),
+    printf("Folder: %s Size: 0x%x(%d) Count: 0x%x(%d)\n",
+           folder.name.c_str(),
            folder.size, folder.size,
            folder.count, folder.count);
 
     if(G_extract) {
         fs::create_directory(G_extract_path / folder_path);
     }
-
-//    folder_path = prefix+"/"+folder_path;
 
     uint32_t processed_size = 0;
     if(last_folder) {
@@ -220,7 +220,7 @@ void parse_kzb(const fs::path &in_file) {
     for(int i =0; i < rootFolder.count; ++i)
         parseFolder("", 1);
 
-    printf("%x", G_idx);
+    printf("0x%x", G_idx);
 }
 
 int main(int argc, const char* argv[]) {
