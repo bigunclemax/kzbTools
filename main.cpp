@@ -1,8 +1,13 @@
 #include <iostream>
 #include <cstring>
-#include <netinet/in.h>
+#ifdef __linux__
+#include <arpa/inet.h>
+#elif _WIN32
+#include <winsock2.h>
+#endif
 #include "utils.h"
 
+#if 0
 #pragma pack(push, 1)
 struct _KZB_elem_header {
     uint32_t addr;
@@ -25,7 +30,27 @@ struct _KZB_last_subfolder_header {
     uint32_t zero2;
     uint32_t count;         //elems count
 };
+
+struct _KZB_root_folder_header {
+    uint16_t name_sz;
+    uint8_t  name[name_sz];
+    uint32_t unk1;
+    uint32_t unk2;
+    uint32_t unk3;
+    uint32_t zero;
+    uint32_t count;
+};
+
 #pragma pack(pop)
+#endif
+
+struct KZB_Root_Folder {
+    uint32_t count;
+    std::string name;
+    uint32_t unk1;
+    uint32_t unk2;
+    uint32_t unk3;
+};
 
 struct KZB_Folder {
     uint32_t size;
@@ -42,21 +67,22 @@ struct KZB_Element {
 };
 
 bool G_extract = true;
-int G_idx = 0x6c;
+fs::path G_extract_path;
+int G_idx = 0x4c;
 std::vector<uint8_t> G_bin;
 
 
 void extract_resource(const std::string &resource_name, uint32_t address, uint32_t size) {
 
     auto unk = *(uint32_t*)&G_bin[address];
-    if(unk) {
-        printf("%s - %x(%d)\n", resource_name.c_str(), unk, unk);
+//    if(unk) { TODO:
+//        printf("%s - %x(%d)\n", resource_name.c_str(), unk, unk);
 //        throw std::runtime_error("Res unk !=0 ");
-    }
-    FTUtils::bufferToFile(resource_name, (const char*)&G_bin[address+sizeof(uint32_t)], size);
+//    }
+    FTUtils::bufferToFile(G_extract_path/resource_name, (const char*)&G_bin[address+sizeof(uint32_t)], size);
 }
 
-uint32_t parseElements(const std::string &prefix, unsigned count) {
+uint32_t parseElements(const std::string &prefix, unsigned count, int depth) {
 
     uint32_t processed_size = 0;
 
@@ -76,7 +102,7 @@ uint32_t parseElements(const std::string &prefix, unsigned count) {
         element.unk2 = ntohl(*(uint32_t*)&G_bin[G_idx]);
         G_idx+=sizeof(uint32_t);
 
-        uint8_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
+        uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
         G_idx+=sizeof(uint16_t);
         char str[str_sz+1]; str[str_sz] = 0;
         memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
@@ -85,6 +111,9 @@ uint32_t parseElements(const std::string &prefix, unsigned count) {
         G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
 
         auto file_path = prefix+"/"+element.name;
+
+        for(int j = 0; j < depth; ++j)
+            printf("\t");
         printf("File: %s Size: %x(%d) Addr: %x(%d) Unk1: %x(%d) Unk2: %x(%d)\n",
                file_path.c_str(),
                element.size, element.size,
@@ -100,14 +129,14 @@ uint32_t parseElements(const std::string &prefix, unsigned count) {
     return processed_size;
 }
 
-uint32_t parseFolder(const std::string &prefix) {
+uint32_t parseFolder(const std::string &prefix, int depth) {
 
     KZB_Folder folder = {};
 
     folder.size = ntohl(*(uint32_t*)&G_bin[G_idx]);
     G_idx+=sizeof(uint32_t);
 
-    uint8_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
+    uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
     G_idx+=sizeof(uint16_t);
 
     char str[str_sz+1]; str[str_sz] = 0;
@@ -125,42 +154,87 @@ uint32_t parseFolder(const std::string &prefix) {
         G_idx+=sizeof(uint32_t);
     }
 
-    auto folder_path = prefix+"/Folder_"+folder.name;
+    auto folder_path = "Folder_"+folder.name;
+
+    for(int i = 0; i < depth; ++i)
+        printf("\t");
     printf("Folder: %s Size: %x(%d) Count: %x(%d)\n",
            folder_path.c_str(),
            folder.size, folder.size,
            folder.count, folder.count);
 
     if(G_extract) {
-        fs::create_directory(folder_path);
+        fs::create_directory(G_extract_path / folder_path);
     }
+
+//    folder_path = prefix+"/"+folder_path;
 
     uint32_t processed_size = 0;
     if(last_folder) {
-        parseElements(folder_path, folder.count);
+        parseElements(folder_path, folder.count, depth+1);
     } else {
         for (int i =0; i < folder.count; ++i) {
-            processed_size += parseFolder(folder_path);
+            processed_size += parseFolder(folder_path, depth+1);
         }
         if(processed_size != folder.size) {
             uint32_t elem_count = ntohl(*(uint32_t*)&G_bin[G_idx]);
             G_idx+=sizeof(uint32_t);
 
-            parseElements(folder_path, elem_count);
+            parseElements(folder_path, elem_count,depth+1);
         }
     }
 
     return folder.size;
 }
 
-int main() {
+void parse_kzb(const fs::path &in_file) {
 
-    G_bin = FTUtils::fileToVector("/home/user/bak/CLionProjects/KZB/cluster.kzb");
+    G_bin = FTUtils::fileToVector(in_file);
 
-    for(int i =0; i < 0x11; ++i)
-        parseFolder("./unpacked");
+    KZB_Root_Folder rootFolder;
+
+    uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint16_t);
+    char str[str_sz+1]; str[str_sz] = 0;
+    memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
+    rootFolder.name = str;
+    G_idx+=str_sz;
+    G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
+
+    rootFolder.unk1 = ntohl(*(uint32_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint32_t);
+
+    rootFolder.unk2 = ntohl(*(uint32_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint32_t);
+
+    rootFolder.unk3 = ntohl(*(uint32_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint32_t);
+
+    auto zero = ntohl(*(uint32_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint32_t);
+
+    rootFolder.count = ntohl(*(uint32_t*)&G_bin[G_idx]);
+    G_idx+=sizeof(uint32_t);
+
+    printf("%s:\n", rootFolder.name.c_str());
+    for(int i =0; i < rootFolder.count; ++i)
+        parseFolder("", 1);
 
     printf("%x", G_idx);
+}
+
+int main(int argc, const char* argv[]) {
+
+    if(argc <= 1) {
+        std::cerr << "Provide .kzb file" << std::endl;
+        return 0;
+    }
+
+    fs::path in_file(argv[1]);
+    G_extract_path = in_file.parent_path()/(in_file.filename().string()+"_unpacked");
+    fs::create_directory(G_extract_path);
+
+    parse_kzb(in_file);
 
     return 0;
 }
