@@ -44,6 +44,10 @@ struct _KZB_root_folder_header {
 #pragma pack(pop)
 #endif
 
+using namespace std;
+
+const char FZBF_sign[5] = "KZBF";
+
 struct KZB_Root_Folder {
     uint32_t count;
     std::string name;
@@ -189,7 +193,7 @@ uint32_t parseFolder(const fs::path &prefix, int depth) {
 
 void parse_kzb(const fs::path &in_file) {
 
-    G_bin = FTUtils::fileToVector(in_file);
+    G_idx = 0x4c;
 
     KZB_Root_Folder rootFolder;
 
@@ -223,6 +227,105 @@ void parse_kzb(const fs::path &in_file) {
     printf("0x%x", G_idx);
 }
 
+#pragma pack(push, 1)
+struct KZBF_elem {
+    uint32_t idx;
+    uint32_t unk1; //FFS?
+    uint32_t addr;
+    uint32_t size;
+    uint32_t unk4; //always zero
+    uint32_t unk5; //duplicate sz
+};
+#pragma pack(pop)
+
+void extract_resource_kzbf(const fs::path &resource_path, uint32_t address, uint32_t size) {
+
+    auto path = G_extract_path; path += resource_path;
+    fs::create_directories(path.parent_path());
+    FTUtils::bufferToFile(path, (const char*)&G_bin[address], size);
+}
+
+void parse_kzbf(const fs::path &in_file) {
+
+    auto unk = *(uint32_t*)&G_bin[G_idx];
+    G_idx += sizeof(uint32_t);
+
+    /*Parse first section*/
+    auto str_sz = *(uint32_t*)&G_bin[G_idx];
+    G_idx += sizeof(uint32_t);
+    char str[str_sz+1]; str[str_sz] = 0;
+    memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
+    G_idx += str_sz;
+    string rootName(str);
+
+    auto count = *(uint32_t*)&G_bin[G_idx];
+    G_idx += sizeof(uint32_t);
+
+    vector<string> nodes(count);
+    for(int i = 0; i < count; ++i) {
+        while (G_bin[G_idx]) {
+            nodes[i] = string((char*)&G_bin[G_idx]);
+            G_idx += nodes[i].size();
+        }
+        G_idx++;
+    }
+
+    printf("Nodes count: %ld\n", nodes.size());
+
+    /* Parse props */
+    count = *(uint32_t*)&G_bin[G_idx];
+    G_idx += sizeof(uint32_t);
+
+    vector<KZBF_elem> elems(count);
+    for(int i = 0; i < count; ++i) {
+        elems[i] = *(KZBF_elem*)&G_bin[G_idx];
+        G_idx += sizeof(KZBF_elem);
+    }
+
+    printf("Nodes prop count: %ld\n", nodes.size());
+
+    for(int i = 0; i < nodes.size(); ++i)
+        printf("%04d 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x %s\n",
+               elems[i].idx,
+               elems[i].unk1,
+               elems[i].addr,
+               elems[i].size,
+               elems[i].unk4,
+               elems[i].unk5,
+               nodes[i].c_str());
+    //TODO: add check if unk5 != size
+    //TODO: add check if unk4 != 0
+
+    /* extract pics */
+    for(int i = 0; i < nodes.size(); ++i) {
+        const auto &_node = nodes[i];
+        if (_node.find(".png") != std::string::npos) {
+            auto res_sz = elems[i].size;
+            G_idx = elems[i].addr;
+
+            auto unk1 = *(uint32_t*)&G_bin[G_idx];
+            G_idx += sizeof(uint32_t);
+
+            auto unk2 = *(uint32_t*)&G_bin[G_idx];
+            G_idx += sizeof(uint32_t);
+
+            auto unk3 = *(uint32_t*)&G_bin[G_idx];
+            G_idx += sizeof(uint32_t);
+
+            auto unk4 = *(uint32_t*)&G_bin[G_idx];
+            G_idx += sizeof(uint32_t);
+
+            auto unk5 = *(uint32_t*)&G_bin[G_idx];
+            G_idx += sizeof(uint32_t);
+
+            //resource
+            if(G_extract) {
+                extract_resource_kzbf(_node, G_idx, res_sz - (5 * sizeof(uint32_t)));
+            }
+        }
+    }
+}
+
 int main(int argc, const char* argv[]) {
 
     if(argc <= 1) {
@@ -234,7 +337,20 @@ int main(int argc, const char* argv[]) {
     G_extract_path = in_file.parent_path()/(in_file.filename().string()+"_unpacked");
     fs::create_directory(G_extract_path);
 
-    parse_kzb(in_file);
+    G_idx = 0;
+    G_bin = FTUtils::fileToVector(in_file);
+
+    char sign[5] = {};
+    sign[0] = G_bin[G_idx + 0];
+    sign[1] = G_bin[G_idx + 1];
+    sign[2] = G_bin[G_idx + 2];
+    sign[3] = G_bin[G_idx + 3];
+    G_idx += sizeof(uint32_t);
+
+    if(strcmp(sign,FZBF_sign) != 0)
+        parse_kzb(in_file);
+    else
+        parse_kzbf(in_file);
 
     return 0;
 }
