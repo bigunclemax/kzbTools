@@ -280,6 +280,12 @@ void parse_kzbf(const fs::path &in_file) {
     for(int i = 0; i < count; ++i) {
         elems[i] = *(KZBF_elem*)&G_bin[G_idx];
         G_idx += sizeof(KZBF_elem);
+
+        if(elems[i].unk4)
+            throw std::runtime_error("unk4 not zero");
+
+        if(elems[i].unk5 != elems[i].size)
+            throw std::runtime_error("unk5 != size");
     }
 
     printf("Nodes prop count: %ld\n", nodes.size());
@@ -293,8 +299,7 @@ void parse_kzbf(const fs::path &in_file) {
                elems[i].unk4,
                elems[i].unk5,
                nodes[i].c_str());
-    //TODO: add check if unk5 != size
-    //TODO: add check if unk4 != 0
+
 
     /* extract pics */
     for(int i = 0; i < nodes.size(); ++i) {
@@ -315,8 +320,18 @@ void parse_kzbf(const fs::path &in_file) {
             auto unk4 = *(uint32_t*)&G_bin[G_idx];
             G_idx += sizeof(uint32_t);
 
-            auto unk5 = *(uint32_t*)&G_bin[G_idx];
+            auto sz = *(uint32_t*)&G_bin[G_idx];
             G_idx += sizeof(uint32_t);
+
+#ifdef _NO
+            printf("0x%08x 0x%08x 0x%08x 0x%08x 0x%08x %s\n",
+                   unk1,
+                   unk2,
+                   unk3,
+                   unk4,
+                   sz,
+                   _node.c_str());
+#endif
 
             //resource
             if(G_extract) {
