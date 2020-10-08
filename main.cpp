@@ -248,6 +248,7 @@ void extract_resource_kzbf(const fs::path &resource_path, uint32_t address, uint
 
     auto path = G_extract_path; path += resource_path;
     fs::create_directories(path.parent_path());
+    path.replace_filename("r_" + path.filename().string());
     FTUtils::bufferToFile(path, (const char*)&G_bin[address], size);
 }
 
