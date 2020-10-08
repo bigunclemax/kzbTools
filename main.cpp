@@ -313,9 +313,9 @@ void parse_kzbf(const fs::path &in_file) {
     /* extract pics */
     for(int i = 0; i < nodes.size(); ++i) {
         const auto &_node = nodes[i];
+        auto res_sz = elems[i].size;
+        G_idx = elems[i].addr;
         if (_node.find(".png") != std::string::npos) {
-            auto res_sz = elems[i].size;
-            G_idx = elems[i].addr;
 
             auto unk1 = *(uint32_t*)&G_bin[G_idx];
             G_idx += sizeof(uint32_t);
@@ -345,6 +345,10 @@ void parse_kzbf(const fs::path &in_file) {
             //resource
             if(G_extract) {
                 extract_resource_kzbf(_node, G_idx, res_sz - (5 * sizeof(uint32_t)));
+            }
+        } else {
+            if(G_extract) {
+                extract_resource_kzbf(_node, G_idx, res_sz);
             }
         }
     }
