@@ -108,9 +108,11 @@ uint32_t parseElements(const fs::path &prefix, unsigned count, int depth) {
 
         uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
         G_idx+=sizeof(uint16_t);
-        char str[str_sz+1]; str[str_sz] = 0;
+        char* str = new char[str_sz + 1];
+        str[str_sz] = 0;
         memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
         element.name = str;
+        delete[] str;
         G_idx+=str_sz;
         G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
 #if _WIN32
@@ -145,9 +147,11 @@ uint32_t parseFolder(const fs::path &prefix, int depth) {
     uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
     G_idx+=sizeof(uint16_t);
 
-    char str[str_sz+1]; str[str_sz] = 0;
+    char* str = new char[str_sz + 1];
+    str[str_sz] = 0;
     memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
     folder.name = str;
+    delete[] str;
     G_idx+=str_sz;
     G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
 
@@ -199,9 +203,11 @@ void parse_kzb(const fs::path &in_file) {
 
     uint16_t str_sz = ntohs(*(uint16_t*)&G_bin[G_idx]);
     G_idx+=sizeof(uint16_t);
-    char str[str_sz+1]; str[str_sz] = 0;
+    char* str = new char[str_sz + 1];
+    str[str_sz] = 0;
     memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
     rootFolder.name = str;
+    delete[] str;
     G_idx+=str_sz;
     G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
 
@@ -253,10 +259,12 @@ void parse_kzbf(const fs::path &in_file) {
     /*Parse first section*/
     auto str_sz = *(uint32_t*)&G_bin[G_idx];
     G_idx += sizeof(uint32_t);
-    char str[str_sz+1]; str[str_sz] = 0;
+    char* str = new char[str_sz + 1];
+    str[str_sz] = 0;
     memcpy(str, (uint8_t*)&G_bin[G_idx], str_sz);
     G_idx += str_sz;
     string rootName(str);
+    delete[] str;
 
     auto count = *(uint32_t*)&G_bin[G_idx];
     G_idx += sizeof(uint32_t);
