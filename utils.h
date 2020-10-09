@@ -74,15 +74,17 @@ namespace FTUtils {
         return data;
     }
 
-    inline std::string normalize_path(std::string s) {
-        std::string illegalChars = "\\/:?\"<>|";
-        for (auto it = s.begin() ; it < s.end() ; ++it){
-            bool found = illegalChars.find(*it) != std::string::npos;
-            if(found){
-                *it = ' ';
-            }
+    fs::path escape_path(const fs::path& path){
+#ifdef _WIN32
+        auto path_str = path.string();
+        std::array<char,7> arr = { ':','*','?','"','<','>','|' };
+        for(auto &ch : arr) {
+            std::replace( path_str.begin(), path_str.end(), ch, '@');
         }
-        return s;
+        return path_str;
+#else
+        return path;
+#endif
     }
 }
 

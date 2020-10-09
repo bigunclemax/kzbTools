@@ -115,11 +115,8 @@ uint32_t parseElements(const fs::path &prefix, unsigned count, int depth) {
         delete[] str;
         G_idx+=str_sz;
         G_idx = (G_idx % 4) ? (G_idx / 4 + 1) * 4 : G_idx; //align
-#if _WIN32
-        auto file_path = fs::path(prefix) / FTUtils::normalize_path(element.name);
-#else
-        auto file_path = fs::path(prefix) / element.name;
-#endif
+        auto file_path = fs::path(prefix) / FTUtils::escape_path(element.name);
+
         for(int j = 0; j < depth; ++j)
             printf("\t");
         printf("File: %s Size: 0x%x(%d) Addr: 0x%x(%d) Unk1: 0x%x(%d) Unk2: 0x%x(%d)\n",
@@ -131,7 +128,7 @@ uint32_t parseElements(const fs::path &prefix, unsigned count, int depth) {
 //        processed_size += element.unk1; //TODO:
 
         if(G_extract) {
-            extract_resource(file_path, element.addr, element.size);
+            extract_resource(FTUtils::escape_path(file_path), element.addr, element.size);
         }
     }
     return processed_size;
@@ -166,15 +163,14 @@ uint32_t parseFolder(const fs::path &prefix, int depth) {
 
     auto folder_path = prefix / ("Folder_"+folder.name);
 
-    for(int i = 0; i < depth; ++i)
-        printf("\t");
+    for(int i = 0; i < depth; ++i) printf("\t");
     printf("Folder: %s Size: 0x%x(%d) Count: 0x%x(%d)\n",
            folder.name.c_str(),
            folder.size, folder.size,
            folder.count, folder.count);
 
     if(G_extract) {
-        fs::create_directory(G_extract_path / folder_path);
+        fs::create_directory(G_extract_path / FTUtils::escape_path(folder_path));
     }
 
     uint32_t processed_size = 0;
@@ -300,15 +296,12 @@ void parse_kzbf(const fs::path &in_file) {
     printf("Nodes prop count: %ld\n", nodes.size());
 
     for(int i = 0; i < nodes.size(); ++i)
-        printf("%04d 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x %s\n",
+        printf("%04d 0x%08x 0x%08x 0x%08x %s\n",
                elems[i].idx,
                elems[i].unk1,
                elems[i].addr,
                elems[i].size,
-               elems[i].unk4,
-               elems[i].unk5,
                nodes[i].c_str());
-
 
     /* extract pics */
     for(int i = 0; i < nodes.size(); ++i) {
@@ -344,11 +337,11 @@ void parse_kzbf(const fs::path &in_file) {
 
             //resource
             if(G_extract) {
-                extract_resource_kzbf(_node, G_idx, res_sz - (5 * sizeof(uint32_t)));
+                extract_resource_kzbf(FTUtils::escape_path(_node), G_idx, res_sz - (5 * sizeof(uint32_t)));
             }
         } else {
             if(G_extract) {
-                extract_resource_kzbf(_node, G_idx, res_sz);
+                extract_resource_kzbf(FTUtils::escape_path(_node), G_idx, res_sz);
             }
         }
     }
@@ -361,7 +354,7 @@ int main(int argc, const char* argv[]) {
         return 0;
     }
 
-    fs::path in_file(argv[1]);
+    auto in_file = fs::absolute(fs::path(argv[1]));
     G_extract_path = in_file.parent_path()/(in_file.filename().string()+"_unpacked");
     fs::create_directory(G_extract_path);
 
